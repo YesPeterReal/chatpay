@@ -1,0 +1,7 @@
+﻿node_modules
+.env
+*.tfstate
+*.tfstate.backup
+.next
+out
+build

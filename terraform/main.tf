@@ -37,22 +37,24 @@ desired_size = 2
 }
 }
 }
-resource "aws_db_instance" "postgres" {
-identifier = "chatpay-postgres"
+resource "aws_db_instance" "postgres_new" {
+identifier = "chatpay-postgres-new"
 engine = "postgres"
 engine_version = "16"
-instance_class = "db.t3.medium"
+instance_class = "db.t3.micro"
 allocated_storage = 20
 storage_type = "gp2"
 username = "chatpay"
 password = "FirstPboss00."
 vpc_security_group_ids = [aws_security_group.postgres.id]
-db_subnet_group_name = aws_db_subnet_group.postgres.name
-multi_az = true
+db_subnet_group_name = aws_db_subnet_group.postgres_public.name
+multi_az = false
+publicly_accessible = true
+apply_immediately = true
 }
-resource "aws_db_subnet_group" "postgres" {
-name = "chatpay-postgres"
-subnet_ids = module.vpc.private_subnets
+resource "aws_db_subnet_group" "postgres_public" {
+name = "chatpay-postgres-public"
+subnet_ids = module.vpc.public_subnets
 }
 resource "aws_security_group" "postgres" {
 vpc_id = module.vpc.vpc_id
@@ -60,7 +62,7 @@ ingress {
 from_port = 5432
 to_port = 5432
 protocol = "tcp"
-cidr_blocks = ["10.0.0.0/16"]
+cidr_blocks = ["0.0.0.0/0"] # Allow from anywhere (for testing, replace with your IP for production)
 }
 }
 resource "aws_msk_cluster" "kafka" {
@@ -90,7 +92,7 @@ cidr_blocks = ["10.0.0.0/16"]
 resource "aws_elasticache_cluster" "redis" {
 cluster_id = "chatpay-redis"
 engine = "redis"
-node_type = "cache.t3.medium"
+node_type = "cache.t3.micro"
 num_cache_nodes = 1
 subnet_group_name = aws_elasticache_subnet_group.redis.name
 security_group_ids = [aws_security_group.redis.id]

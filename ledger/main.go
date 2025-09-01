@@ -5,7 +5,7 @@ import (
 _ "github.com/lib/pq"
 )
 func main() {
-connStr := "host=chatpay-postgres-new.cxwak020irdl.eu-west-3.rds.amazonaws.com port=5432 user=chatpay password=FirstPboss00. dbname=postgres sslmode=require"
+connStr := "host=chatpay-postgres-new.cxwak020irdl.eu-west-3.rds.amazonaws.com port=5432 user=chatpay password=FirstPboss00. dbname=postgres sslmode=verify-full sslrootcert=rds-ca-rsa2048-g1.pem"
 db, err := sql.Open("postgres", connStr)
 if err != nil {
 fmt.Println("Error connecting to database:", err)

@@ -2,5 +2,7 @@
 terraform/.terraform/
 terraform/.terraform.lock.hcl
 terraform/main.go
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
 redis-cli/
 *.pem

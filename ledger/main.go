@@ -105,7 +105,7 @@ func main() {
         if stripePaymentID != nil {
             stripeID = *stripePaymentID
         }
-        fmt.Printf("ID: %d, User: %s, Amount: %.2f %s, Status: %s, Stripe ID: %s\n", id, userID, amount, currency, status, stripeID)
+        fmt.Printf("ID: %d, User: %s, Amount: %.2f %s, Status: %s, Stripe ID: %s\n", id, userID, amount, currency, stripeID)
     }
 
     if err = rows.Err(); err != nil {

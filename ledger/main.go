@@ -4,6 +4,7 @@ import (
     "database/sql"
     "fmt"
     "log"
+    "os"
     "github.com/stripe/stripe-go/v76"
     "github.com/stripe/stripe-go/v76/paymentintent"
     _ "github.com/lib/pq"
@@ -11,7 +12,7 @@ import (
 
 func main() {
     // Initialize Stripe with your secret key
-    stripe.Key = "***REMOVED***"
+   stripe.Key = os.Getenv("STRIPE_KEY")
 
     // Database connection string
     connStr := "host=chatpay-postgres-new.cxwak020irdl.eu-west-3.rds.amazonaws.com port=5432 user=chatpay password=FirstPboss00. dbname=postgres sslmode=verify-full sslrootcert=rds-ca-rsa2048-g1.pem"

@@ -11,8 +11,11 @@ import (
 )
 
 func main() {
-    // Initialize Stripe with your secret key
-   stripe.Key = os.Getenv("STRIPE_KEY")
+    // Initialize Stripe with environment variable
+    stripe.Key = os.Getenv("STRIPE_KEY")
+    if stripe.Key == "" {
+        log.Fatalf("Error: STRIPE_KEY environment variable not set")
+    }
 
     // Database connection string
     connStr := "host=chatpay-postgres-new.cxwak020irdl.eu-west-3.rds.amazonaws.com port=5432 user=chatpay password=FirstPboss00. dbname=postgres sslmode=verify-full sslrootcert=rds-ca-rsa2048-g1.pem"
@@ -92,7 +95,7 @@ func main() {
         var id int
         var userID, currency, status string
         var amount float64
-        var stripePaymentID *string // Handle NULL values
+        var stripePaymentID *string
         err := rows.Scan(&id, &userID, &amount, &currency, &status, &stripePaymentID)
         if err != nil {
             log.Printf("Error scanning payments: %v", err)

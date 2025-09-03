@@ -1,24 +1,54 @@
 ﻿package main
 
 import (
+    "context"
     "database/sql"
+    "encoding/json"
     "fmt"
     "log"
-    "os"
+    "github.com/aws/aws-sdk-go-v2/config"
+    "github.com/aws/aws-sdk-go-v2/service/secretsmanager"
     "github.com/stripe/stripe-go/v76"
-    "github.com/stripe/stripe-go/v76/paymentintent"
     _ "github.com/lib/pq"
+    "github.com/aws/aws-sdk-go-v2/aws"
 )
 
 func main() {
-    // Initialize Stripe with environment variable
-    stripe.Key = os.Getenv("STRIPE_KEY")
-    if stripe.Key == "" {
-        log.Fatalf("Error: STRIPE_KEY environment variable not set")
+    // Retrieve Stripe key and PostgreSQL password from AWS Secrets Manager
+    cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion("eu-west-3"))
+    if err != nil {
+        log.Fatalf("Error loading AWS config: %v", err)
     }
+    client := secretsmanager.NewFromConfig(cfg)
+
+    // Retrieve Stripe key
+    secretOutput, err := client.GetSecretValue(context.TODO(), &secretsmanager.GetSecretValueInput{
+        SecretId: aws.String("chatpay/stripe-key"),
+    })
+    if err != nil {
+        log.Fatalf("Error retrieving Stripe secret: %v", err)
+    }
+    var secret map[string]string
+    if err := json.Unmarshal([]byte(*secretOutput.SecretString), &secret); err != nil {
+        log.Fatalf("Error parsing Stripe secret: %v", err)
+    }
+    stripe.Key = secret["STRIPE_KEY"]
+
+    // Retrieve PostgreSQL password
+    secretOutput, err = client.GetSecretValue(context.TODO(), &secretsmanager.GetSecretValueInput{
+        SecretId: aws.String("chatpay/postgres-password"),
+    })
+    if err != nil {
+        log.Fatalf("Error retrieving PostgreSQL secret: %v", err)
+    }
+    var pgSecret map[string]string
+    if err := json.Unmarshal([]byte(*secretOutput.SecretString), &pgSecret); err != nil {
+        log.Fatalf("Error parsing PostgreSQL secret: %v", err)
+    }
+    postgresPassword := pgSecret["POSTGRES_PASSWORD"]
 
     // Database connection string
-    connStr := "host=chatpay-postgres-new.cxwak020irdl.eu-west-3.rds.amazonaws.com port=5432 user=chatpay password=FirstPboss00. dbname=postgres sslmode=verify-full sslrootcert=rds-ca-rsa2048-g1.pem"
+    connStr := fmt.Sprintf("host=chatpay-postgres-new.cxwak020irdl.eu-west-3.rds.amazonaws.com port=5432 user=chatpay password=%s dbname=postgres sslmode=verify-full sslrootcert=rds-ca-rsa2048-g1.pem", postgresPassword)
     db, err := sql.Open("postgres", connStr)
     if err != nil {
         log.Fatalf("Error connecting to database: %v", err)
@@ -49,6 +79,8 @@ func main() {
     }
     fmt.Println("Payments table ensured successfully!")
 
+    // Skip test payment creation for now (commented out for production)
+    /*
     // Create a sample Stripe payment
     params := &stripe.PaymentIntentParams{
         Amount:   stripe.Int64(10050), // 100.50 EUR in cents
@@ -72,7 +104,7 @@ func main() {
         if !exists {
             // Insert payment into database
             _, err = db.Exec("INSERT INTO payments (user_id, amount, currency, status, stripe_payment_id) VALUES ($1, $2, $3, $4, $5)",
-                "user123", 100.50, "EUR", pi.Status, pi.ID)
+                "user123", 100.50, "EUR", string(pi.Status), pi.ID)
             if err != nil {
                 log.Printf("Error inserting payment: %v", err)
             } else {
@@ -82,6 +114,7 @@ func main() {
             fmt.Println("Payment already exists, skipping insertion")
         }
     }
+    */
 
     // Query payments by user ID
     rows, err := db.Query("SELECT id, user_id, amount, currency, status, stripe_payment_id FROM payments WHERE user_id = $1", "user123")
@@ -105,7 +138,7 @@ func main() {
         if stripePaymentID != nil {
             stripeID = *stripePaymentID
         }
-        fmt.Printf("ID: %d, User: %s, Amount: %.2f %s, Status: %s, Stripe ID: %s\n", id, userID, amount, currency, stripeID)
+        fmt.Printf("ID: %d, User: %s, Amount: %.2f %s, Status: %s, Stripe ID: %s\n", id, userID, amount, currency, status, stripeID)
     }
 
     if err = rows.Err(); err != nil {

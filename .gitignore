@@ -6,3 +6,6 @@ terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
 redis-cli/
 *.pem
+replace.txt
+test.json
+test_parse.go

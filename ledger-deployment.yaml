@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ledger
+  template:
+    metadata:
+      labels:
+        app: ledger
+    spec:
+      containers:
+      - name: ledger
+        image: 370924439074.dkr.ecr.eu-west-3.amazonaws.com/chatpay-ledger:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: AWS_REGION
+          value: "eu-west-3"
+        - name: STRIPE_KEY_SECRET_ID
+          value: "chatpay/stripe-key"
+        - name: POSTGRES_PASSWORD_SECRET_ID
+          value: "chatpay/postgres-password"

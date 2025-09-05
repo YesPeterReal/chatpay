@@ -9,8 +9,10 @@ import (
     "github.com/aws/aws-sdk-go-v2/config"
     "github.com/aws/aws-sdk-go-v2/service/secretsmanager"
     "github.com/stripe/stripe-go/v76"
+    "github.com/stripe/stripe-go/v76/paymentintent"
     _ "github.com/lib/pq"
     "github.com/aws/aws-sdk-go-v2/aws"
+    "github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -79,69 +81,96 @@ func main() {
     }
     fmt.Println("Payments table ensured successfully!")
 
-    // Skip test payment creation for now (commented out for production)
-    /*
-    // Create a sample Stripe payment
-    params := &stripe.PaymentIntentParams{
-        Amount:   stripe.Int64(10050), // 100.50 EUR in cents
-        Currency: stripe.String(string(stripe.CurrencyEUR)),
-        Description: stripe.String("ChatPay test payment"),
-        Metadata: map[string]string{
-            "user_id": "user123",
-        },
-    }
-    pi, err := paymentintent.New(params)
-    if err != nil {
-        log.Printf("Error creating Stripe payment: %v", err)
-    } else {
-        fmt.Printf("Stripe PaymentIntent created: %s\n", pi.ID)
-        // Check if payment already exists
+    // Set up Gin router
+    r := gin.Default()
+
+    // Add CORS middleware
+    r.Use(func(c *gin.Context) {
+        c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+        c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+        if c.Request.Method == "OPTIONS" {
+            c.AbortWithStatus(204)
+            return
+        }
+        c.Next()
+    })
+
+    // Endpoint to list payments
+    r.GET("/payments", func(c *gin.Context) {
+        rows, err := db.Query("SELECT id, user_id, amount, currency, status, stripe_payment_id FROM payments WHERE user_id = $1", "user123")
+        if err != nil {
+            c.JSON(500, gin.H{"error": err.Error()})
+            return
+        }
+        defer rows.Close()
+        var payments []map[string]interface{}
+        for rows.Next() {
+            var id int
+            var userID, currency, status, stripeID string
+            var amount float64
+            var stripePaymentID *string
+            if err := rows.Scan(&id, &userID, &amount, &currency, &status, &stripePaymentID); err != nil {
+                c.JSON(500, gin.H{"error": err.Error()})
+                return
+            }
+            stripeID = ""
+            if stripePaymentID != nil {
+                stripeID = *stripePaymentID
+            }
+            payments = append(payments, map[string]interface{}{
+                "id": id,
+                "user_id": userID,
+                "amount": amount,
+                "currency": currency,
+                "status": status,
+                "stripe_payment_id": stripeID,
+            })
+        }
+        c.JSON(200, payments)
+    })
+
+    // Endpoint to create a payment
+    r.POST("/create-payment", func(c *gin.Context) {
+        var input struct {
+            Amount   int64  "json:\"amount\""
+            Currency string "json:\"currency\""
+            UserID   string "json:\"user_id\""
+        }
+        if err := c.ShouldBindJSON(&input); err != nil {
+            c.JSON(400, gin.H{"error": "Invalid input"})
+            return
+        }
+        params := &stripe.PaymentIntentParams{
+            Amount:   stripe.Int64(input.Amount),
+            Currency: stripe.String(input.Currency),
+            Description: stripe.String("ChatPay payment"),
+            Metadata: map[string]string{
+                "user_id": input.UserID,
+            },
+        }
+        pi, err := paymentintent.New(params)
+        if err != nil {
+            c.JSON(500, gin.H{"error": err.Error()})
+            return
+        }
         var exists bool
         err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM payments WHERE stripe_payment_id = $1)", pi.ID).Scan(&exists)
         if err != nil {
-            log.Printf("Error checking payment existence: %v", err)
+            c.JSON(500, gin.H{"error": err.Error()})
+            return
         }
         if !exists {
-            // Insert payment into database
             _, err = db.Exec("INSERT INTO payments (user_id, amount, currency, status, stripe_payment_id) VALUES ($1, $2, $3, $4, $5)",
-                "user123", 100.50, "EUR", string(pi.Status), pi.ID)
+                input.UserID, float64(input.Amount)/100, input.Currency, string(pi.Status), pi.ID)
             if err != nil {
-                log.Printf("Error inserting payment: %v", err)
-            } else {
-                fmt.Println("Sample payment inserted successfully!")
+                c.JSON(500, gin.H{"error": err.Error()})
+                return
             }
-        } else {
-            fmt.Println("Payment already exists, skipping insertion")
         }
-    }
-    */
+        c.JSON(200, gin.H{"paymentIntentId": pi.ID, "status": pi.Status})
+    })
 
-    // Query payments by user ID
-    rows, err := db.Query("SELECT id, user_id, amount, currency, status, stripe_payment_id FROM payments WHERE user_id = $1", "user123")
-    if err != nil {
-        log.Fatalf("Error querying payments: %v", err)
-    }
-    defer rows.Close()
-
-    fmt.Println("Payments for user123:")
-    for rows.Next() {
-        var id int
-        var userID, currency, status string
-        var amount float64
-        var stripePaymentID *string
-        err := rows.Scan(&id, &userID, &amount, &currency, &status, &stripePaymentID)
-        if err != nil {
-            log.Printf("Error scanning payments: %v", err)
-            continue
-        }
-        stripeID := ""
-        if stripePaymentID != nil {
-            stripeID = *stripePaymentID
-        }
-        fmt.Printf("ID: %d, User: %s, Amount: %.2f %s, Status: %s, Stripe ID: %s\n", id, userID, amount, currency, status, stripeID)
-    }
-
-    if err = rows.Err(); err != nil {
-        log.Fatalf("Error iterating over payments: %v", err)
-    }
+    // Start server
+    r.Run(":8080") // Listen on port 8080
 }

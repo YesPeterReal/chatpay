@@ -9,3 +9,6 @@ redis-cli/
 replace.txt
 test.json
 test_parse.go
+amplify-policy.json
+amplify-role.json
+chatpay-frontend/

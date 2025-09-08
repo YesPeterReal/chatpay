@@ -7,6 +7,7 @@
          "fmt"
          "log"
          "net/http"
+         "time"
          "github.com/aws/aws-sdk-go-v2/config"
          "github.com/aws/aws-sdk-go-v2/service/secretsmanager"
          "github.com/stripe/stripe-go/v76"
@@ -16,14 +17,12 @@
      )
 
      func main() {
-         // Retrieve Stripe key and PostgreSQL password from AWS Secrets Manager
          cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion("eu-west-3"))
          if err != nil {
              log.Fatalf("Error loading AWS config: %v", err)
          }
          client := secretsmanager.NewFromConfig(cfg)
 
-         // Retrieve Stripe key
          secretOutput, err := client.GetSecretValue(context.TODO(), &secretsmanager.GetSecretValueInput{
              SecretId: aws.String("chatpay/stripe-key"),
          })
@@ -36,7 +35,6 @@
          }
          stripe.Key = secret["STRIPE_KEY"]
 
-         // Retrieve PostgreSQL password
          secretOutput, err = client.GetSecretValue(context.TODO(), &secretsmanager.GetSecretValueInput{
              SecretId: aws.String("chatpay/postgres-password"),
          })
@@ -49,7 +47,6 @@
          }
          postgresPassword := pgSecret["POSTGRES_PASSWORD"]
 
-         // Database connection string
          connStr := fmt.Sprintf("host=chatpay-postgres-new.cxwak020irdl.eu-west-3.rds.amazonaws.com port=5432 user=chatpay password=%s dbname=postgres sslmode=verify-full sslrootcert=rds-ca-rsa2048-g1.pem", postgresPassword)
          db, err := sql.Open("postgres", connStr)
          if err != nil {
@@ -57,14 +54,12 @@
          }
          defer db.Close()
 
-         // Verify database connection
          err = db.Ping()
          if err != nil {
              log.Fatalf("Error pinging database: %v", err)
          }
          fmt.Println("Successfully connected to chatpay-postgres-new!")
 
-         // Create payments table
          _, err = db.Exec(`
              CREATE TABLE IF NOT EXISTS payments (
                  id SERIAL PRIMARY KEY,
@@ -81,9 +76,8 @@
          }
          fmt.Println("Payments table ensured successfully!")
 
-         // HTTP handler for creating payments
          http.HandleFunc("/create-payment", func(w http.ResponseWriter, r *http.Request) {
-             w.Header().Set("Access-Control-Allow-Origin", "*") // Allow all origins for local testing
+             w.Header().Set("Access-Control-Allow-Origin", "*")
              w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
              w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
              if r.Method == "OPTIONS" {
@@ -127,7 +121,44 @@
              })
          })
 
-         // Start server
+         http.HandleFunc("/list-payments", func(w http.ResponseWriter, r *http.Request) {
+             w.Header().Set("Access-Control-Allow-Origin", "*")
+             w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+             w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+             if r.Method == "OPTIONS" {
+                 w.WriteHeader(http.StatusOK)
+                 return
+             }
+
+             rows, err := db.Query("SELECT stripe_payment_id, amount, currency, status, created_at FROM payments")
+             if err != nil {
+                 http.Error(w, fmt.Sprintf("Error querying payments: %v", err), http.StatusInternalServerError)
+                 return
+             }
+             defer rows.Close()
+
+             var payments []map[string]interface{}
+             for rows.Next() {
+                 var paymentId, currency, status string
+                 var amount float64
+                 var createdAt time.Time
+                 if err := rows.Scan(&paymentId, &amount, &currency, &status, &createdAt); err != nil {
+                     http.Error(w, fmt.Sprintf("Error scanning payments: %v", err), http.StatusInternalServerError)
+                     return
+                 }
+                 payments = append(payments, map[string]interface{}{
+                     "paymentIntentId": paymentId,
+                     "amount":          amount,
+                     "currency":        currency,
+                     "status":          status,
+                     "createdAt":       createdAt.Format(time.RFC3339),
+                 })
+             }
+
+             w.Header().Set("Content-Type", "application/json")
+             json.NewEncoder(w).Encode(payments)
+         })
+
          fmt.Println("Starting server on :8080")
          log.Fatal(http.ListenAndServe(":8080", nil))
      }

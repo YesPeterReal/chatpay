@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chatpay-config
+  namespace: default
+data:
+  POSTGRES_HOST: chatpay-postgres-new.cxwak020irdl.eu-west-3.rds.amazonaws.com
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: chatpay
+  POSTGRES_DB: postgres
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatpay-ledger
+  labels:
+    app: chatpay-ledger
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: chatpay-ledger
+  template:
+    metadata:
+      labels:
+        app: chatpay-ledger
+    spec:
+      containers:
+      - name: chatpay
+        image: 370924439074.dkr.ecr.eu-west-3.amazonaws.com/chatpay-ledger:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: chatpay-secrets
+              key: postgres-password
+        - name: POSTGRES_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: chatpay-config
+              key: POSTGRES_HOST
+        - name: POSTGRES_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: chatpay-config
+              key: POSTGRES_PORT
+        - name: POSTGRES_USER
+          valueFrom:
+            configMapKeyRef:
+              name: chatpay-config
+              key: POSTGRES_USER
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: chatpay-config
+              key: POSTGRES_DB
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chatpay-service
+spec:
+  selector:
+    app: chatpay-ledger
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: LoadBalancer

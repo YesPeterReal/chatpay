@@ -1,0 +1,10 @@
+Set-Location C:\Users\peter\chatpay\server
+docker build -t chatpay-ledger:latest .
+aws ecr get-login-password --region eu-west-3 | docker login --username AWS --password-stdin 370924439074.dkr.ecr.eu-west-3.amazonaws.com
+docker tag chatpay-ledger:latest 370924439074.dkr.ecr.eu-west-3.amazonaws.com/chatpay-ledger:latest
+docker push 370924439074.dkr.ecr.eu-west-3.amazonaws.com/chatpay-ledger:latest
+
+
+kubectl rollout restart deployment chatpay-ledger
+kubectl get pods -l app=chatpay-ledger
+kubectl get pods -l app=chatpay-ledger

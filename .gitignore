@@ -12,3 +12,10 @@ test_parse.go
 amplify-policy.json
 amplify-role.json
 chatpay-frontend/
+node_modules/
+.env
+.env.local
+*.pem
+dist/
+build/
+.next/

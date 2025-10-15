@@ -6,25 +6,15 @@ import (
     "fmt"
     "log"
     "net/http"
-    "os"
     "time"
-    "github.com/dgrijalva/jwt-go"
-    "golang.org/x/crypto/bcrypt"
     _ "github.com/lib/pq"
 )
 
 var db *sql.DB
 
 func main() {
-    postgresHost := os.Getenv("POSTGRES_HOST")
-    postgresPort := os.Getenv("POSTGRES_PORT")
-    postgresUser := os.Getenv("POSTGRES_USER")
-    postgresPassword := os.Getenv("POSTGRES_PASSWORD")
-    postgresDB := os.Getenv("POSTGRES_DB")
-
-    connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=require",
-        postgresHost, postgresPort, postgresUser, postgresPassword, postgresDB)
-
+    // Initialize database connection
+    connStr := "host=chatpay-postgres-new.cxwak020irdl.eu-west-3.rds.amazonaws.com port=5432 user=chatpay password=FirstPboss00.Nakata dbname=postgres sslmode=require"
     var err error
     db, err = sql.Open("postgres", connStr)
     if err != nil {
@@ -35,6 +25,7 @@ func main() {
     }
     log.Println("Successfully connected to database")
 
+    // Create tables if not exist
     _, err = db.Exec(`
         CREATE TABLE IF NOT EXISTS payments (
             id SERIAL PRIMARY KEY,
@@ -45,7 +36,6 @@ func main() {
             status VARCHAR(50) NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-
         CREATE TABLE IF NOT EXISTS payment_requests (
             id SERIAL PRIMARY KEY,
             requester_id VARCHAR(50) NOT NULL,
@@ -55,58 +45,36 @@ func main() {
             status VARCHAR(50) NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            user_id VARCHAR(50) NOT NULL,
-            email VARCHAR(100) NOT NULL,
-            password_hash VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            CONSTRAINT users_user_id_unique UNIQUE (user_id),
-            CONSTRAINT users_email_unique UNIQUE (email)
-        );
     `)
     if err != nil {
         log.Fatalf("Error creating tables: %v", err)
     }
     log.Println("Tables ensured successfully")
 
-    hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
-    _, err = db.Exec("INSERT INTO users (user_id, email, password_hash) VALUES ($1, $2, $3) ON CONFLICT (email) DO NOTHING",
-        "user123", "user@example.com", string(hashedPassword))
-    if err != nil {
-        log.Fatalf("Error inserting test user: %v", err)
-    }
-
+    // Use ServeMux with CORS middleware for all routes
     mux := http.NewServeMux()
     handler := enableCORS(mux)
-    mux.HandleFunc("/health", healthCheck)
-    mux.HandleFunc("/create-payment", authMiddleware(createPayment))
-    mux.HandleFunc("/request-payment", authMiddleware(requestPayment))
+    mux.HandleFunc("/create-payment", createPayment)
+    mux.HandleFunc("/request-payment", requestPayment)
     mux.HandleFunc("/list-payments", listPayments)
     mux.HandleFunc("/log-interaction", logInteraction)
-    mux.HandleFunc("/login", login)
 
-    log.Println("Starting server on 0.0.0.0:8080")
-if err := http.ListenAndServe("0.0.0.0:8080", handler); err != nil {
-    log.Fatalf("Server failed to start: %v", err)
-  }
-
-}
-
-func healthCheck(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
+    log.Println("Starting server on :8080")
+    if err := http.ListenAndServe(":8080", handler); err != nil {
+        log.Fatalf("Server failed to start: %v", err)
+    }
 }
 
 func enableCORS(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Log request details for debugging
         log.Printf("Received %s request for %s with headers: %v", r.Method, r.URL.Path, r.Header)
+        // Set CORS headers
         w.Header().Set("Access-Control-Allow-Origin", "*")
         w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept")
-        w.Header().Set("Access-Control-Max-Age", "86400")
+        w.Header().Set("Access-Control-Max-Age", "86400") // Cache preflight for 24 hours
+        // Handle preflight OPTIONS request
         if r.Method == http.MethodOptions {
             log.Printf("Handling OPTIONS request for %s", r.URL.Path)
             w.WriteHeader(http.StatusNoContent)
@@ -116,75 +84,8 @@ func enableCORS(next http.Handler) http.Handler {
     })
 }
 
-func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        tokenStr := r.Header.Get("Authorization")
-        if tokenStr == "" {
-            log.Printf("Missing Authorization header")
-            http.Error(w, "Authorization header required", http.StatusUnauthorized)
-            return
-        }
-        if len(tokenStr) > 7 && tokenStr[:7] == "Bearer " {
-            tokenStr = tokenStr[7:]
-        }
-        token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
-            if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-                return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-            }
-            return []byte("your-secret-key"), nil
-        })
-        if err != nil || !token.Valid {
-            log.Printf("Invalid token: %v", err)
-            http.Error(w, "Invalid token", http.StatusUnauthorized)
-            return
-        }
-        next(w, r)
-    }
-}
-
-func login(w http.ResponseWriter, r *http.Request) {
-    if r.Method != http.MethodPost {
-        log.Printf("Invalid method %s for /login", r.Method)
-        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-        return
-    }
-    var input struct {
-        Email    string `json:"email"`
-        Password string `json:"password"`
-    }
-    if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-        log.Printf("Error decoding login request: %v", err)
-        http.Error(w, fmt.Sprintf("Error decoding request: %v", err), http.StatusBadRequest)
-        return
-    }
-    var userId, passwordHash string
-    err := db.QueryRow("SELECT user_id, password_hash FROM users WHERE email = $1", input.Email).Scan(&userId, &passwordHash)
-    if err != nil {
-        log.Printf("Invalid credentials: %v", err)
-        http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-        return
-    }
-    if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(input.Password)); err != nil {
-        log.Printf("Password mismatch: %v", err)
-        http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-        return
-    }
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-        "user_id": userId,
-        "exp":     time.Now().Add(time.Hour * 24).Unix(),
-    })
-    tokenString, err := token.SignedString([]byte("your-secret-key"))
-    if err != nil {
-        log.Printf("Error generating token: %v", err)
-        http.Error(w, "Error generating token", http.StatusInternalServerError)
-        return
-    }
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(map[string]string{"token": tokenString})
-}
-
 func createPayment(w http.ResponseWriter, r *http.Request) {
+    // Only allow POST requests
     if r.Method != http.MethodPost {
         log.Printf("Invalid method %s for /create-payment", r.Method)
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -237,6 +138,7 @@ func createPayment(w http.ResponseWriter, r *http.Request) {
 }
 
 func requestPayment(w http.ResponseWriter, r *http.Request) {
+    // Only allow POST requests
     if r.Method != http.MethodPost {
         log.Printf("Invalid method %s for /request-payment", r.Method)
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -286,11 +188,13 @@ func requestPayment(w http.ResponseWriter, r *http.Request) {
 }
 
 func listPayments(w http.ResponseWriter, r *http.Request) {
+    // Only allow GET requests
     if r.Method != http.MethodGet {
         log.Printf("Invalid method %s for /list-payments", r.Method)
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
         return
     }
+    // Log query parameters for debugging
     log.Printf("Query parameters for /list-payments: %v", r.URL.Query())
     rows, err := db.Query("SELECT stripe_payment_id, user_id, amount, currency, status, created_at FROM payments")
     if err != nil {
@@ -329,6 +233,7 @@ func listPayments(w http.ResponseWriter, r *http.Request) {
 }
 
 func logInteraction(w http.ResponseWriter, r *http.Request) {
+    // Only allow POST requests
     if r.Method != http.MethodPost {
         log.Printf("Invalid method %s for /log-interaction", r.Method)
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

@@ -1,0 +1,20 @@
+DashboardSection.tsx:
+powershellnotepad C:\Users\peter\chatpay-frontend\pages\dashboard\DashboardSection.tsx
+
+
+Replace the import line with:
+tsximport { ChatpayThemeContext } from '../../src/contexts/chatpayThemeContext';
+
+Update payments.tsx:
+powershellnotepad C:\Users\peter\chatpay-frontend\pages\dashboard\payments.tsx
+
+
+Replace the import line with:
+tsximport { ChatpayThemeContext } from '../../src/contexts/chatpayThemeContext';
+
+Update Wallet.tsx (if it's showing the error for '../../'):
+powershellnotepad C:\Users\peter\chatpay-frontend\src\components\Wallet.tsx
+
+
+Replace the import line with:
+tsximport { ChatpayThemeContext } from '../contexts/chatpayThemeContext';

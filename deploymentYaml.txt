@@ -26,10 +26,10 @@ spec:
     spec:
       containers:
       - name: chatpay
-        image: 370924439074.dkr.ecr.eu-west-3.amazonaws.com/chatpay-ledger:latest
+        image: 370924439074.dkr.ecr.eu-west-3.amazonaws.com/chatpay-ledger:20250914-health-fix
         imagePullPolicy: Always
         ports:
-        - containerPort: 3000  # Changed from 8080 to match app.js
+        - containerPort: 8080
           protocol: TCP
         env:
         - name: POSTGRES_PASSWORD
@@ -57,10 +57,21 @@ spec:
             configMapKeyRef:
               name: chatpay-config
               key: POSTGRES_DB
-        resources:
-          limits:
-            cpu: "500m"
-            memory: "512Mi"
-          requests:
-            cpu: "200m"
-            memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chatpay-service
+  namespace: default
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/health"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "HTTP"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "traffic-port"
+spec:
+  selector:
+    app: chatpay-ledger
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: LoadBalancer

@@ -1,8 +1,9 @@
 FROM golang:1.20
 WORKDIR /app
-COPY main.go .
-RUN go mod init chatpay
-RUN go get github.com/lib/pq
+COPY go.mod ./
+COPY go.sum ./
+RUN go mod download
+COPY main.go ./
 RUN go build -o chatpay .
 EXPOSE 8080
 CMD ["./chatpay"]

@@ -1,0 +1,241 @@
+import { useState, useEffect, useContext } from 'react';
+import { useRouter } from 'next/router';
+import styled, { keyframes } from 'styled-components';
+import { ChatpayThemeContext } from '../../src/contexts/chatpayThemeContext';
+
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
+const pulse = keyframes`
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+`;
+
+const slideIn = keyframes`
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+`;
+
+const NotificationBubble = styled.div`
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  background: ${props => (props.error ? '#FF4D4D' : '#00E676')};
+  color: #0A0A0A;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  animation: ${fadeIn} 0.5s ease-out;
+  z-index: 1000;
+  font-family: 'Inter', sans-serif;
+  font-size: 1.2rem;
+  font-weight: 600;
+  min-width: 300px;
+  max-width: 400px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.5;
+  word-break: break-word;
+`;
+
+const Card = styled.div`
+  background: ${props => props.theme === 'day' ? '#F5F5F5' : '#1E1E2F'};
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  margin-bottom: 24px;
+  animation: ${fadeIn} 0.5s ease-out;
+`;
+
+const WelcomeCard = styled(Card)`
+  text-align: center;
+`;
+
+const BalanceSection = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+`;
+
+const BalanceCard = styled(Card)`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: center;
+`;
+
+const TransactionList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+const TransactionItem = styled(Card)`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: ${props => props.theme === 'day' ? 'linear-gradient(90deg, #F5F5F5, #E0E0E0)' : 'linear-gradient(90deg, #1E1E2F, #2A2A3D)'};
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  animation: ${slideIn} 0.5s ease-out;
+
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 6px 20px rgba(0, 230, 118, 0.3);
+  }
+`;
+
+const TransactionDetails = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: ${props => props.theme === 'day' ? '#0A0A0A' : '#FFFFFF'};
+  font-family: 'Inter', sans-serif;
+`;
+
+const TransactionAmount = styled.span`
+  font-weight: 600;
+  color: ${props => (props.type === 'credit' ? '#00E676' : props.type === 'debit' ? '#FF4D4D' : '#FFD700')};
+`;
+
+const ActionButton = styled.button`
+  padding: 12px 24px;
+  font-size: 1rem;
+  background: linear-gradient(45deg, #00E676, #007BFF);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  font-family: 'Inter', sans-serif;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 230, 118, 0.4);
+    animation: ${pulse} 0.5s ease-in-out;
+  }
+`;
+
+const ButtonContainer = styled.div`
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  justify-content: center;
+`;
+
+const Message = styled.p`
+  font-size: 0.9rem;
+  color: ${props => (props.error ? '#FF4D4D' : '#00E676')};
+  text-align: center;
+  font-family: 'Inter', sans-serif;
+`;
+
+const DashboardSection = () => {
+  const { theme, notificationsEnabled } = useContext(ChatpayThemeContext);
+  const [balances, setBalances] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [message, setMessage] = useState('');
+  const [isError, setIsError] = useState(false);
+  const [showNotification, setShowNotification] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const fetchBalances = async () => {
+      try {
+        const response = await fetch('http://a259a65a215074ce9a3d929b9ad88289-969653129.eu-west-3.elb.amazonaws.com/wallet/balance', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        const data = await response.json();
+        if (response.ok) {
+          setBalances(data);
+        } else {
+          setMessage(data.error || 'Failed to fetch balances');
+          setIsError(true);
+          if (notificationsEnabled) setShowNotification(true);
+          setTimeout(() => setShowNotification(false), 3000);
+        }
+      } catch (error) {
+        setMessage('Error: ' + error.message);
+        setIsError(true);
+        if (notificationsEnabled) setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 3000);
+      }
+    };
+
+    const fetchTransactions = async () => {
+      try {
+        const response = await fetch('http://a259a65a215074ce9a3d929b9ad88289-969653129.eu-west-3.elb.amazonaws.com/recent-transactions', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        const data = await response.json();
+        if (response.ok) {
+          setTransactions(data);
+        } else {
+          setMessage(data.error || 'Failed to fetch transactions');
+          setIsError(true);
+          if (notificationsEnabled) setShowNotification(true);
+          setTimeout(() => setShowNotification(false), 3000);
+        }
+      } catch (error) {
+        setMessage('Error: ' + error.message);
+        setIsError(true);
+        if (notificationsEnabled) setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 3000);
+      }
+    };
+
+    fetchBalances();
+    fetchTransactions();
+  }, []);
+
+  return (
+    <div>
+      <ButtonContainer>
+        <ActionButton onClick={() => router.push('/dashboard?section=wallet')}>Fund Wallet</ActionButton>
+        <ActionButton onClick={() => router.push('/dashboard?section=payments')}>Send Payment</ActionButton>
+        <ActionButton onClick={() => router.push('/dashboard?section=payments')}>Request Payment</ActionButton>
+      </ButtonContainer>
+      <WelcomeCard theme={theme}>
+        <h2>Welcome to ChatPay</h2>
+        <p>Your financial hub for seamless transactions.</p>
+      </WelcomeCard>
+      <BalanceSection>
+        {balances.map((balance, index) => (
+          <BalanceCard key={index} theme={theme}>
+            <h4>{balance.currency}</h4>
+            <p>{balance.balance}</p>
+          </BalanceCard>
+        ))}
+      </BalanceSection>
+      <TransactionList>
+        <h3>Recent Transactions</h3>
+        {transactions.slice(0, 5).map((tx, index) => (
+          <TransactionItem key={index} theme={theme}>
+            <TransactionDetails theme={theme}>
+              <TransactionAmount type={tx.type}>{tx.type} {tx.amount} {tx.currency}</TransactionAmount>
+              <span>{new Date(tx.created_at).toLocaleString()}</span>
+            </TransactionDetails>
+          </TransactionItem>
+        ))}
+      </TransactionList>
+      {showNotification && <NotificationBubble error={isError}>{message}</NotificationBubble>}
+    </div>
+  );
+};
+
+export default DashboardSection;

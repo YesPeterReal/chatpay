@@ -4,10 +4,12 @@
         {
             "Effect": "Allow",
             "Action": [
-                "ecr:GetDownloadUrlForLayer",
-                "ecr:BatchGetImage",
+                "ecr:GetAuthorizationToken",
                 "ecr:BatchCheckLayerAvailability",
-                "ecr:GetAuthorizationToken"
+                "ecr:CompleteLayerUpload",
+                "ecr:InitiateLayerUpload",
+                "ecr:PutImage",
+                "ecr:UploadLayerPart"
             ],
             "Resource": "*"
         }
